@@ -1,0 +1,64 @@
+name: CI/CD Pipeline Laravel 13[cite: 3]
+
+on:
+  push:
+    branches: [ "main" ][cite: 3]
+
+jobs:
+  # ==========================================
+  # TAHAP 1: CONTINUOUS INTEGRATION (Testing)
+  # ==========================================
+  continuous-integration:[cite: 3]
+    runs-on: ubuntu-latest[cite: 3]
+    steps:
+      - name: Checkout Repository[cite: 3]
+        uses: actions/checkout@v4[cite: 3]
+
+      - name: Setup PHP 8.3[cite: 3]
+        uses: shivammathur/setup-php@v2[cite: 3]
+        with:
+          php-version: '8.3'[cite: 3]
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, dom, filter, gd, json[cite: 3]
+
+      - name: Install Dependencies[cite: 3]
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist[cite: 3]
+
+      - name: Siapkan Environment Testing[cite: 3]
+        run: |
+          cp .env.example .env
+          php artisan key:generate[cite: 3]
+
+      - name: Jalankan Unit/Feature Test[cite: 3]
+        run: php artisan test[cite: 4]
+
+  # ==========================================
+  # TAHAP 2: CONTINUOUS DEPLOYMENT
+  # ==========================================
+  continuous-deployment:[cite: 4]
+    needs: continuous-integration # Menunggu CI sukses[cite: 4]
+    runs-on: ubuntu-latest[cite: 4]
+    if: github.ref == 'refs/heads/main' # Hanya berjalan di branch main[cite: 4]
+    steps:
+      - name: Eksekusi Deployment via SSH ke Ubuntu 24.04[cite: 4]
+        uses: appleboy/ssh-action@v1.0.3[cite: 4]
+        with:
+          host: ${{ secrets.SERVER_HOST }}[cite: 4]
+          username: ${{ secrets.SERVER_USERNAME }}[cite: 4]
+          key: ${{ secrets.SERVER_SSH_KEY }}[cite: 4]
+          script: |
+            cd /var/www/html/asbosapp
+            # Masuk maintenance mode
+            php artisan down || true
+            # Tarik kode terbaru dari GitHub
+            git pull origin main
+            # Install dependency (production only)
+            composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
+            # Jalankan migrasi database
+            php artisan migrate --force
+            # Optimasi cache
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            # Keluar maintenance mode
+            php artisan up[cite: 4]
